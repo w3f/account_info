@@ -77,9 +77,9 @@ def fetch_events(address):
         # Increment the page number for the next request
         page += 1
 
-        # This sleeps for 400 ms, to ensure that we don't overwhelm our free tier of
-        # API services from Subscan
-        time.sleep(0.4)
+        # This sleeps for 250 ms, to ensure that we don't overwhelm our free tier of
+        # API services from Subscan (5 requests per second)
+        time.sleep(0.25)
     
     return all_events
 
@@ -96,14 +96,18 @@ def fetch_account_data(address):
     result = json.loads(r.text)
     return result
 
-# Check if account is verified - returns string "Yes" or "No"
+# Check if account is verified
 def account_verified():
-    verified = ACCOUNT_DATA['data']['list'][0]['account_display']['judgements'][0]['judgement']
-    
-    if verified == 'KnownGood':
-        verified = "[VERIFIED]"
-    else:
-        verified = "[NOT VERIFIED]"
+
+     # Navigate through the nested dictionaries/lists safely with .get and provide defaults
+    judgements = (ACCOUNT_DATA
+                  .get('data', {})
+                  .get('list', [{}])[0]
+                  .get('account_display', {})
+                  .get('judgements', []))
+                  
+    # Check if 'KnownGood' is in any of the judgements
+    verified = "[VERIFIED]" if any(j.get('judgement') == 'KnownGood' for j in judgements) else "[NOT VERIFIED]"
 
     return verified
 
