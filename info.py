@@ -40,24 +40,48 @@ def fetch_events(address):
     # Full URL
     url = f"{BASE_URL}{endpoint}"
 
-    # Parameters for the request, adjust if necessary
-    params = json.dumps({
-        "address": address,
-        "page": 0,
-        "row": 100
-    })
+    # Initialize the list to store all events
+    all_events = []
+    # Start with page 0
+    page = 0
+    # Set the maximum number of rows per request
+    row = 100
 
-    # Send the GET request to the API
-    response = requests.request("POST", url, headers=HEADERS, data=params)
-    
-    # Check if the request was successful
-    if response.status_code != 200:
-        print("fetching events failed with status code: " + response.status_code)
-        sys.exit(1)
-    else:
+    while True:
+        # Parameters for the request, adjust if necessary
+        params = json.dumps({
+            "address": address,
+            "page": page,
+            "row": row
+        })
+
+        # Send the POST request to the API
+        response = requests.request("POST", url, headers=HEADERS, data=params)
+
+        # Check if the request was successful
+        if response.status_code != 200:
+            print("Fetching events failed with status code: " + str(response.status_code))
+            sys.exit(1)
+
         # Convert the response to JSON
         data = response.json()
-        return data
+        
+        # Extract events from the current page and add them to the all_events list
+        events = data['data']['events']  # Adjust the key based on actual response structure
+        all_events.extend(events)
+
+        # Break the loop if the number of events is less than the max row count
+        if len(events) < row:
+            break
+
+        # Increment the page number for the next request
+        page += 1
+
+        # This sleeps for 400 ms, to ensure that we don't overwhelm our free tier of
+        # API services from Subscan
+        time.sleep(0.4)
+    
+    return all_events
 
 # Once gather the events related to the account
 def fetch_account_data(address):
@@ -73,14 +97,13 @@ def fetch_account_data(address):
     return result
 
 # Check if account is verified - returns string "Yes" or "No"
-def account_verified(address):
+def account_verified():
+    verified = ACCOUNT_DATA['data']['list'][0]['account_display']['judgements'][0]['judgement']
     
-    verified = ACCOUNT_DATA['data']['list'][0]['registrar_info']
-
-    if verified == None:
-        verified = "NOT VERIFIED"
+    if verified == 'KnownGood':
+        verified = "[VERIFIED]"
     else:
-        verified = "VERIFIED"
+        verified = "[NOT VERIFIED]"
 
     return verified
 
@@ -109,10 +132,10 @@ def print_account_identity_info():
 # an identity.IdentitySet event occurred). Note that you need to check
 # for events, not extrinsics, because the extrinsic won't show up
 # if a proxy was used.
-def get_identity_set_date(address):  
+def get_identity_set_date():  
     # search for first event that sets the on-chain identity
     first_identity_event = None
-    for event in EVENTS['data']['events']:
+    for event in EVENTS:
         # Check if the event concerns setting the identity
         if event['event_id'] == 'IdentitySet':
             first_identity_event = event
@@ -128,10 +151,10 @@ def get_identity_set_date(address):
 # an identity.JudgementGiven event occurred). Note that you need to check
 # for events, not extrinsics, because the extrinsic won't show up
 # if a proxy was used.
-def get_identity_verified_date(address):
+def get_identity_verified_date():
     # search for first event that sets the on-chain identity
     first_identity_verified_event = None
-    for event in EVENTS['data']['events']:
+    for event in EVENTS:
         # Check if the event concerns setting the identity
         if event['event_id'] == 'JudgementGiven':
             first_identity_verified_event = event
@@ -150,7 +173,7 @@ def get_identity_verified_date(address):
 # It may be better to check for Treasury.Rewarded events, but these would
 # have to be double-checked as the proposal_index won't line up exactly
 # with the Referendum.
-def get_other_tps(address):
+def get_other_tps():
     return "None"
 
 
@@ -197,11 +220,11 @@ else:
     sys.exit(1)
 ACCOUNT_DATA = fetch_account_data(ADDRESS)
 EVENTS = fetch_events(ADDRESS)
-verified = account_verified(ADDRESS)
+verified = account_verified()
 #identity_info = get_account_identity_info(ACCOUNT_DATA)
-identity_set_date = get_identity_set_date(ADDRESS)
-identity_verified_date = get_identity_verified_date(ADDRESS)
-other_tps = get_other_tps(ADDRESS)
+identity_set_date = get_identity_set_date()
+identity_verified_date = get_identity_verified_date()
+other_tps = get_other_tps()
 
 print_out_final(ADDRESS, verified, print_account_identity_info, identity_set_date,
                 identity_verified_date, other_tps)
